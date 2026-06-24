@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Big Pitcher of Water — APA Stats v14</title>
+<title>Big Pitcher of Water — APA Stats v15</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -128,15 +128,17 @@ body { font-family: 'Open Sans', system-ui, sans-serif; background: var(--page-b
 .patch-tbl td { padding: 11px 12px; border-bottom: 1px solid var(--border-lt); border-right: 1px solid var(--border-lt); text-align: center; font-size: .85rem; }
 .patch-tbl td:first-child { text-align: left; border-right: 2px solid var(--border); }
 .patch-tbl td:last-child { border-right: none; }
-.patch-tbl tbody tr:nth-child(even) td { background: var(--row-alt); }
+.patch-tbl tbody tr:nth-child(even) td { background-color: var(--row-alt); }
 .patch-tbl tbody tr:hover td { background: #edf2f8; }
 .check { color: var(--green-patch); font-size: 1rem; font-weight: 700; }
 .check-cnt { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: var(--win-bg); color: var(--green-patch); font-family: 'Oswald', sans-serif; font-size: .78rem; font-weight: 700; cursor: pointer; }
 .total-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 22px; border-radius: 11px; background: var(--navy); color: #fff; font-family: 'Oswald', sans-serif; font-size: .75rem; font-weight: 700; padding: 0 6px; }
-.patch-type-8  { border-left: 3px solid #1a5fb4; }
-.patch-type-9  { border-left: 3px solid var(--red); }
-.patch-type-tm { border-left: 3px solid var(--gold); }
-.patch-type-sp { border-left: 3px solid #6a3a9e; }
+.patch-type-8  { background-image: linear-gradient(to right, #1a5fb4 4px, transparent 4px); }
+.patch-type-9  { background-image: linear-gradient(to right, #c0152a 4px, transparent 4px); }
+.patch-type-tm { background-image: linear-gradient(to right, #c8960a 4px, transparent 4px); }
+.patch-type-sp { background-image: linear-gradient(to right, #6a3a9e 4px, transparent 4px); }
+/* Even-row tint must use background-color only so it stacks under the gradient stripe */
+.patch-tbl tbody tr:nth-child(even) td:first-child { background-color: var(--row-alt); }
 
 /* Adv toggle button — styled as SL bubble */
 .adv-toggle {
@@ -196,11 +198,9 @@ body { font-family: 'Open Sans', system-ui, sans-serif; background: var(--page-b
 .setup li { margin-bottom: 5px; }
 .setup code { background: #fff3c0; border: 1px solid #e8d080; border-radius: 3px; padding: 1px 5px; font-size: .8rem; color: #5a3a00; }
 
-/* Sticky table column headers — offset clears site header (64px) + tab bar (~44px) */
+/* Table column headers — not sticky, just sit naturally at top of table */
 .stbl thead th {
-  position: sticky;
-  top: 108px;
-  z-index: 10;
+  position: static;
 }
 /* Sticky first column (Player name) */
 .stbl th:first-child,
@@ -223,17 +223,15 @@ body { font-family: 'Open Sans', system-ui, sans-serif; background: var(--page-b
   background: #f0f3f7;
 }
 .patch-tbl td:first-child { background: var(--card-bg); }
-.patch-tbl tbody tr:nth-child(even) td:first-child { background: var(--row-alt); }
 
 @media (max-width: 680px) {
   html, body { overflow-x: hidden; }
   .site-header { padding: 0 14px; height: 56px; }
   .brand-main { font-size: 1rem; }
-  .tab-bar { padding: 0 10px; top: 56px; } /* tab bar below 56px mobile header */
+  .tab-bar { padding: 0 10px; top: 56px; }
   .tab { padding: 10px 12px; font-size: .8rem; }
   .content { padding: 16px 12px 40px; }
   .adv-grid { grid-template-columns: 1fr; }
-  .stbl thead th { top: 96px; } /* 56px header + ~40px tab bar */
   .tiles { grid-template-columns: repeat(2, 1fr); }
   .footnote { font-size: .72rem; }
   .expand-label { display: none; }
@@ -503,8 +501,20 @@ function calcTeamRecord(gameType) {
   return { W, D, L };
 }
 function toggleAdv(key) {
+  // Capture scroll positions before re-render so the view doesn't jump
+  const wrap      = document.querySelector('.tbl-wrap');
+  const scrollX   = wrap ? wrap.scrollLeft : 0;
+  const scrollY   = window.scrollY || window.pageYOffset || 0;
+
   expandedAdv.has(key) ? expandedAdv.delete(key) : expandedAdv.add(key);
   render();
+
+  // Restore both positions after the DOM update
+  requestAnimationFrame(() => {
+    window.scrollTo({ top: scrollY, behavior: 'instant' });
+    const newWrap = document.querySelector('.tbl-wrap');
+    if (newWrap) newWrap.scrollLeft = scrollX;
+  });
 }
 function getPlayerSL(name, gt) {
   const r = playerRows.find(r=>(r.name||'').toLowerCase()===name.toLowerCase());
@@ -827,7 +837,7 @@ function renderPatches() {
   typeGroups.forEach(grp => {
     const grpPatches = PATCHES.filter(pt => grp.types.includes(pt.type));
     if (!grpPatches.length) return;
-    html += `<tr><td class="patch-section-title ${grp.cls}" style="padding:8px 14px;position:sticky;left:0;z-index:4">${grp.label}</td>${PLAYERS.map(()=>`<td style="background:#f7f9fb;border-bottom:1px solid var(--border-lt);border-right:1px solid var(--border-lt)"></td>`).join('')}</tr>`;
+    html += `<tr><td class="patch-section-title ${grp.cls}" style="padding:8px 14px;position:sticky;left:0;z-index:6">${grp.label}</td>${PLAYERS.map(()=>`<td style="background-color:#f7f9fb;border-bottom:1px solid var(--border-lt);border-right:1px solid var(--border-lt)"></td>`).join('')}</tr>`;
     grpPatches.forEach(pt => {
       html += `<tr>
         <td style="font-weight:600;color:var(--text-mid);white-space:nowrap" class="${grp.cls}">${pt.label}</td>
