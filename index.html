@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Big Pitcher of Water — APA Stats v6</title>
+<title>Big Pitcher of Water — APA Stats v7</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
 <style>
@@ -286,18 +286,27 @@ function splitCSV(line) {
 // ══════════════════════════════════════════
 // FETCH — two separate sheets, no &sheet= param
 // ══════════════════════════════════════════
+async function safeFetch(url, label) {
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`${label}: HTTP ${res.status}`);
+  const text = await res.text();
+  // If Google returns an HTML page the sheet isn't published as CSV yet
+  if (text.trim().startsWith('<')) {
+    throw new Error(`${label}: Sheet not published as CSV. Go to File → Share → Publish to web → select CSV → Publish.`);
+  }
+  return text;
+}
+
 async function fetchData() {
   if (loading) return;
   loading = true; setStatus('loading');
   try {
-    const [pRes, mRes] = await Promise.all([
-      fetch(PLAYERS_URL, { cache: 'no-store' }),
-      fetch(MATCHES_URL, { cache: 'no-store' })
+    const [pText, mText] = await Promise.all([
+      safeFetch(PLAYERS_URL, 'Players'),
+      safeFetch(MATCHES_URL, 'Matches')
     ]);
-    if (!pRes.ok) throw new Error(`Players HTTP ${pRes.status}`);
-    if (!mRes.ok) throw new Error(`Matches HTTP ${mRes.status}`);
-    playerRows = parseCSV(await pRes.text());
-    matchRows  = parseCSV(await mRes.text()).map(r => ({
+    playerRows = parseCSV(pText);
+    matchRows  = parseCSV(mText).map(r => ({
       game_type:       (r.game_type||'').toLowerCase(),
       player:          r.player||'',
       week:            parseInt(r.week)||0,
@@ -326,7 +335,7 @@ async function fetchData() {
     setStatus('ok');
   } catch(e) {
     console.error('[APA] Fetch error:', e);
-    setStatus('err');
+    setStatus('err', e.message);
   } finally {
     loading = false;
     render();
@@ -410,11 +419,25 @@ function switchAdvTab(gt) {
   advTabs = { adv8ball: gt==='8ball', adv9ball: gt==='9ball' };
   render();
 }
-function setStatus(state) {
-  const d=document.getElementById('sdot'), t=document.getElementById('stext');
-  if (state==='ok')      { d.className='sdot ok';  t.textContent='Live · '+(lastUpdated?.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})||''); }
-  else if(state==='err') { d.className='sdot err'; t.textContent='Error'; }
-  else                   { d.className='sdot';     t.textContent='Loading…'; }
+function setStatus(state, msg) {
+  const d = document.getElementById('sdot');
+  const t = document.getElementById('stext');
+  if (state === 'ok') {
+    d.className   = 'sdot ok';
+    t.textContent = 'Live · ' + (lastUpdated?.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) || '');
+    t.title       = '';
+  } else if (state === 'err') {
+    d.className   = 'sdot err';
+    t.textContent = msg ? '❌ ' + msg : '❌ Error — check console';
+    t.title       = msg || '';
+    t.style.maxWidth = '480px';
+    t.style.whiteSpace = 'normal';
+    t.style.fontSize = '.7rem';
+  } else {
+    d.className   = 'sdot';
+    t.textContent = 'Loading…';
+    t.title       = '';
+  }
 }
 
 // ══════════════════════════════════════════
