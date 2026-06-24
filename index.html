@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Big Pitcher of Water — APA Stats v4</title>
+<title>Big Pitcher of Water — APA Stats v5</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
 <style>
@@ -221,11 +221,11 @@ body { font-family: 'Open Sans', system-ui, sans-serif; background: var(--page-b
 
 <script>
 // ══════════════════════════════════════════
-// CONFIG — paste your Sheet ID here
+// CONFIG
 // ══════════════════════════════════════════
-const BASE_URL    = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQGpDCXJPqdW-7-BGogQvd_Te381aGJBClnldcQA1ex5U6u0Ufiy6-5QQhxnJrJ28oaBm9yUTndW9Tx/pub?output=csv';
-const CONFIGURED  = true;
-// If your Matches tab has a different name, change it here:
+// Regular Sheet ID — sheet must be "Anyone with link can view"
+// No need to publish to web at all.
+const SHEET_ID    = '1LntMa3sOtRDPhK7IYIGnXfi_TpV2lbLLu2iK5G9hQMg';
 const PLAYERS_TAB = 'Players';
 const MATCHES_TAB = 'Matches';
 
@@ -253,66 +253,61 @@ const PATCHES = [
 // STATE
 // ══════════════════════════════════════════
 let playerRows = [], matchRows = [], lastUpdated = null, loading = false;
-let patchDates = {}; // { player: { patchKey: [date, ...] } }
+let patchDates = {};
 let activeTab  = '8ball';
 let advTabs    = { adv8ball: true, adv9ball: false };
+const sorts    = { '8ball': {col:null,dir:-1}, '9ball': {col:null,dir:-1} };
 
-// Sort state: { col, dir } per table key
-const sorts = { '8ball': {col:null,dir:-1}, '9ball': {col:null,dir:-1} };
-
-// ══════════════════════════════════════════
-// CSV
-// ══════════════════════════════════════════
-function parseCSV(text) {
-  const lines = text.trim().split('\n');
-  if (lines.length < 2) return [];
-  const hdrs = splitLine(lines[0]).map(h => h.trim().toLowerCase().replace(/\s+/g,'_'));
-  return lines.slice(1).map(l => {
-    const vs = splitLine(l);
-    const o  = {};
-    hdrs.forEach((h,i) => { o[h] = (vs[i]||'').trim(); });
-    return o;
-  }).filter(r => Object.values(r).some(v => v));
-}
-function splitLine(line) {
-  const res = []; let cur='', inQ=false;
-  for (let i=0;i<line.length;i++) {
-    const c=line[i];
-    if (c==='"'){ inQ=!inQ; continue; }
-    if (c===','&&!inQ){ res.push(cur); cur=''; continue; }
-    cur+=c;
-  }
-  res.push(cur); return res;
-}
 function isYes(v) { return (v||'').toLowerCase().trim()==='yes'; }
+
+// ══════════════════════════════════════════
+// JSONP via Google Visualization API
+// Works from file:// — no CORS issues
+// ══════════════════════════════════════════
+function fetchGviz(sheetName) {
+  return new Promise((resolve, reject) => {
+    const cb  = '_gviz_' + Math.random().toString(36).slice(2);
+    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&callback=${cb}&sheet=${encodeURIComponent(sheetName)}`;
+    window[cb] = data => {
+      delete window[cb];
+      script.remove();
+      try {
+        const table = data.table;
+        if (!table) { resolve([]); return; }
+        const headers = table.cols.map(c =>
+          (c.label || c.id || '').trim().toLowerCase().replace(/[\s-]+/g,'_')
+        );
+        const rows = (table.rows || []).map(row => {
+          const obj = {};
+          headers.forEach((h, i) => {
+            const cell = row.c ? row.c[i] : null;
+            obj[h] = (cell && cell.v !== null && cell.v !== undefined) ? String(cell.v).trim() : '';
+          });
+          return obj;
+        }).filter(r => Object.values(r).some(v => v !== ''));
+        resolve(rows);
+      } catch(e) { reject(e); }
+    };
+    const script = document.createElement('script');
+    script.src     = url;
+    script.onerror = () => { delete window[cb]; reject(new Error('Failed to load: ' + sheetName)); };
+    document.head.appendChild(script);
+  });
+}
 
 // ══════════════════════════════════════════
 // FETCH
 // ══════════════════════════════════════════
-function sheetURL(tab) {
-  return `${BASE_URL}&sheet=${encodeURIComponent(tab)}`;
-}
 async function fetchData() {
-  if (!CONFIGURED || loading) { render(); return; }
+  if (loading) return;
   loading = true; setStatus('loading');
   try {
-    const pURL = sheetURL(PLAYERS_TAB);
-    const mURL = sheetURL(MATCHES_TAB);
-    console.log('[APA] Fetching Players:', pURL);
-    console.log('[APA] Fetching Matches:', mURL);
-    const [pR, mR] = await Promise.all([
-      fetch(pURL, {cache:'no-store'}),
-      fetch(mURL, {cache:'no-store'})
+    const [pRows, mRows] = await Promise.all([
+      fetchGviz(PLAYERS_TAB),
+      fetchGviz(MATCHES_TAB)
     ]);
-    console.log('[APA] Players status:', pR.status);
-    console.log('[APA] Matches status:', mR.status);
-    if (!pR.ok || !mR.ok) throw new Error(`HTTP ${pR.status}/${mR.status}`);
-    const pText = await pR.text();
-    const mText = await mR.text();
-    console.log('[APA] Players raw (first 200):', pText.slice(0,200));
-    console.log('[APA] Matches raw (first 200):', mText.slice(0,200));
-    playerRows = parseCSV(pText);
-    matchRows  = parseCSV(mText).map(r => ({
+    playerRows = pRows;
+    matchRows  = mRows.map(r => ({
       game_type:       (r.game_type||'').toLowerCase(),
       player:          r.player||'',
       week:            parseInt(r.week)||0,
@@ -324,7 +319,6 @@ async function fetchData() {
       oppteam_earned:  parseFloat(r.oppteam_earned)||0,
       patches: Object.fromEntries(PATCHES.map(p => [p.key, isYes(r[p.key])]))
     }));
-    lastUpdated = new Date();
     // Build patch dates lookup
     patchDates = {};
     PLAYERS.forEach(p => {
@@ -338,9 +332,15 @@ async function fetchData() {
         if (m.patches[pt.key] && m.date) patchDates[player][pt.key].push(m.date);
       });
     });
+    lastUpdated = new Date();
     setStatus('ok');
-  } catch(e) { console.error(e); setStatus('err'); }
-  finally { loading=false; render(); }
+  } catch(e) {
+    console.error('[APA] Fetch error:', e);
+    setStatus('err');
+  } finally {
+    loading = false;
+    render();
+  }
 }
 
 // ══════════════════════════════════════════
@@ -451,11 +451,10 @@ function renderGame(gt) {
   const sorted = sortPlayers(PLAYERS, statsMap, s.col, s.dir);
 
   let html = `<div class="refresh-bar">
-    <span class="last-upd">${lastUpdated ? 'Updated: '+lastUpdated.toLocaleString() : CONFIGURED ? 'Loading…' : 'Not connected'}</span>
-    ${CONFIGURED ? `<button class="btn-refresh" onclick="fetchData()" ${loading?'disabled':''}>↻ Refresh</button>` : ''}
+    <span class="last-upd">${lastUpdated ? 'Updated: '+lastUpdated.toLocaleString() : 'Loading…'}</span>
+    <button class="btn-refresh" onclick="fetchData()" ${loading?'disabled':''}>↻ Refresh</button>
   </div>`;
 
-  if (!CONFIGURED) html += renderSetup();
 
   if (gm.length) {
     const wins  = gm.filter(m=>m.player_earned>m.opponent_earned).length;
