@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Big Pitcher of Water — APA Stats v5</title>
+<title>Big Pitcher of Water — APA Stats v6</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
 <style>
@@ -222,12 +222,11 @@ body { font-family: 'Open Sans', system-ui, sans-serif; background: var(--page-b
 <script>
 // ══════════════════════════════════════════
 // CONFIG
+// Each sheet published separately as CSV.
+// File → Share → Publish to web → CSV → copy URL
 // ══════════════════════════════════════════
-// Regular Sheet ID — sheet must be "Anyone with link can view"
-// No need to publish to web at all.
-const SHEET_ID    = '1LntMa3sOtRDPhK7IYIGnXfi_TpV2lbLLu2iK5G9hQMg';
-const PLAYERS_TAB = 'Players';
-const MATCHES_TAB = 'Matches';
+const PLAYERS_URL = 'https://docs.google.com/spreadsheets/d/1LntMa3sOtRDPhK7IYIGnXfi_TpV2lbLLu2iK5G9hQMg/pub?output=csv';
+const MATCHES_URL = 'https://docs.google.com/spreadsheets/d/1W1nYaswO8LMzo7xpsQ5mLQY3Ir_Mc19Rcd6Itdx5SAM/pub?output=csv';
 
 const PLAYERS = ["Brandon","Daniel","Kevin","Charlie","Quinn","Jacqueline","Aidan","Courtney"];
 
@@ -261,53 +260,44 @@ const sorts    = { '8ball': {col:null,dir:-1}, '9ball': {col:null,dir:-1} };
 function isYes(v) { return (v||'').toLowerCase().trim()==='yes'; }
 
 // ══════════════════════════════════════════
-// JSONP via Google Visualization API
-// Works from file:// — no CORS issues
+// CSV PARSER
 // ══════════════════════════════════════════
-function fetchGviz(sheetName) {
-  return new Promise((resolve, reject) => {
-    const cb  = '_gviz_' + Math.random().toString(36).slice(2);
-    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&callback=${cb}&sheet=${encodeURIComponent(sheetName)}`;
-    window[cb] = data => {
-      delete window[cb];
-      script.remove();
-      try {
-        const table = data.table;
-        if (!table) { resolve([]); return; }
-        const headers = table.cols.map(c =>
-          (c.label || c.id || '').trim().toLowerCase().replace(/[\s-]+/g,'_')
-        );
-        const rows = (table.rows || []).map(row => {
-          const obj = {};
-          headers.forEach((h, i) => {
-            const cell = row.c ? row.c[i] : null;
-            obj[h] = (cell && cell.v !== null && cell.v !== undefined) ? String(cell.v).trim() : '';
-          });
-          return obj;
-        }).filter(r => Object.values(r).some(v => v !== ''));
-        resolve(rows);
-      } catch(e) { reject(e); }
-    };
-    const script = document.createElement('script');
-    script.src     = url;
-    script.onerror = () => { delete window[cb]; reject(new Error('Failed to load: ' + sheetName)); };
-    document.head.appendChild(script);
-  });
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) return [];
+  const hdrs = splitCSV(lines[0]).map(h => h.trim().toLowerCase().replace(/\s+/g,'_'));
+  return lines.slice(1).map(l => {
+    const vs = splitCSV(l), obj = {};
+    hdrs.forEach((h,i) => { obj[h] = (vs[i]||'').trim(); });
+    return obj;
+  }).filter(r => Object.values(r).some(v => v));
+}
+function splitCSV(line) {
+  const res = []; let cur = '', inQ = false;
+  for (const c of line) {
+    if (c === '"') { inQ = !inQ; continue; }
+    if (c === ',' && !inQ) { res.push(cur); cur = ''; continue; }
+    cur += c;
+  }
+  res.push(cur);
+  return res;
 }
 
 // ══════════════════════════════════════════
-// FETCH
+// FETCH — two separate sheets, no &sheet= param
 // ══════════════════════════════════════════
 async function fetchData() {
   if (loading) return;
   loading = true; setStatus('loading');
   try {
-    const [pRows, mRows] = await Promise.all([
-      fetchGviz(PLAYERS_TAB),
-      fetchGviz(MATCHES_TAB)
+    const [pRes, mRes] = await Promise.all([
+      fetch(PLAYERS_URL, { cache: 'no-store' }),
+      fetch(MATCHES_URL, { cache: 'no-store' })
     ]);
-    playerRows = pRows;
-    matchRows  = mRows.map(r => ({
+    if (!pRes.ok) throw new Error(`Players HTTP ${pRes.status}`);
+    if (!mRes.ok) throw new Error(`Matches HTTP ${mRes.status}`);
+    playerRows = parseCSV(await pRes.text());
+    matchRows  = parseCSV(await mRes.text()).map(r => ({
       game_type:       (r.game_type||'').toLowerCase(),
       player:          r.player||'',
       week:            parseInt(r.week)||0,
