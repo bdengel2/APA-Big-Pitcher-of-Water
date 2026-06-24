@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Big Pitcher of Water — APA Stats v13</title>
+<title>Big Pitcher of Water — APA Stats v14</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -43,7 +43,7 @@ body { font-family: 'Open Sans', system-ui, sans-serif; background: var(--page-b
 .sdot.err { background: #e05252; }
 
 /* Tabs */
-.tab-bar { background: var(--navy-mid); display: flex; padding: 0 28px; gap: 2px; overflow-x: auto; }
+.tab-bar { background: var(--navy-mid); display: flex; padding: 0 28px; gap: 2px; overflow-x: auto; position: sticky; top: 64px; z-index: 90; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
 .tab { font-family: 'Oswald', sans-serif; font-size: .88rem; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase; padding: 12px 20px; cursor: pointer; color: #7a9dc0; border-bottom: 3px solid transparent; margin-bottom: -1px; transition: color .15s, border-color .15s; white-space: nowrap; user-select: none; }
 .tab:hover { color: #c8dced; }
 .tab.active { color: #fff; border-bottom-color: var(--red); }
@@ -196,10 +196,10 @@ body { font-family: 'Open Sans', system-ui, sans-serif; background: var(--page-b
 .setup li { margin-bottom: 5px; }
 .setup code { background: #fff3c0; border: 1px solid #e8d080; border-radius: 3px; padding: 1px 5px; font-size: .8rem; color: #5a3a00; }
 
-/* Sticky table column headers */
+/* Sticky table column headers — offset clears site header (64px) + tab bar (~44px) */
 .stbl thead th {
   position: sticky;
-  top: 64px; /* below the site header */
+  top: 108px;
   z-index: 10;
 }
 /* Sticky first column (Player name) */
@@ -229,16 +229,13 @@ body { font-family: 'Open Sans', system-ui, sans-serif; background: var(--page-b
   html, body { overflow-x: hidden; }
   .site-header { padding: 0 14px; height: 56px; }
   .brand-main { font-size: 1rem; }
-  .tab-bar { padding: 0 10px; }
+  .tab-bar { padding: 0 10px; top: 56px; } /* tab bar below 56px mobile header */
   .tab { padding: 10px 12px; font-size: .8rem; }
   .content { padding: 16px 12px 40px; }
   .adv-grid { grid-template-columns: 1fr; }
-  .stbl thead th { top: 56px; } /* mobile header is shorter */
-  /* On mobile, tiles wrap to 2 columns */
+  .stbl thead th { top: 96px; } /* 56px header + ~40px tab bar */
   .tiles { grid-template-columns: repeat(2, 1fr); }
-  /* Shrink PPM footnote */
   .footnote { font-size: .72rem; }
-  /* Hide "Click to Expand" text on very small screens, keep bubble */
   .expand-label { display: none; }
 }
 </style>
@@ -263,7 +260,7 @@ body { font-family: 'Open Sans', system-ui, sans-serif; background: var(--page-b
   <div class="tab active" data-tab="8ball"   onclick="switchTab('8ball')">8-Ball</div>
   <div class="tab"        data-tab="9ball"   onclick="switchTab('9ball')">9-Ball</div>
   <div class="tab"        data-tab="patches" onclick="switchTab('patches')">Patch Tracker</div>
-  <div class="tab"        data-tab="team"    onclick="switchTab('team')">Team</div>
+  <div class="tab"        data-tab="team"    onclick="switchTab('team')">Team Charts</div>
 </nav>
 
 <div class="patch-tip" id="patchTip"><div class="tip-title">Dates Earned</div><div id="tipDates"></div></div>
@@ -830,7 +827,7 @@ function renderPatches() {
   typeGroups.forEach(grp => {
     const grpPatches = PATCHES.filter(pt => grp.types.includes(pt.type));
     if (!grpPatches.length) return;
-    html += `<tr><td colspan="${PLAYERS.length+1}" class="patch-section-title ${grp.cls}" style="padding:8px 14px">${grp.label}</td></tr>`;
+    html += `<tr><td class="patch-section-title ${grp.cls}" style="padding:8px 14px;position:sticky;left:0;z-index:4">${grp.label}</td>${PLAYERS.map(()=>`<td style="background:#f7f9fb;border-bottom:1px solid var(--border-lt);border-right:1px solid var(--border-lt)"></td>`).join('')}</tr>`;
     grpPatches.forEach(pt => {
       html += `<tr>
         <td style="font-weight:600;color:var(--text-mid);white-space:nowrap" class="${grp.cls}">${pt.label}</td>
@@ -861,18 +858,21 @@ function renderPatches() {
 // ══════════════════════════════════════════
 function buildChartData(gameType) {
   const gm = matchRows.filter(m => m.game_type === gameType);
-  const allWeeks = [...new Set(gm.map(m => m.week))].sort((a,b) => a - b);
+  // Always start from Week 1; extend to the highest recorded week
+  const maxWeek = gm.length ? Math.max(...gm.map(m => m.week)) : 1;
+  const allWeeks = Array.from({ length: maxWeek }, (_, i) => i + 1);
+
   const datasets = PLAYERS.map((player, i) => {
     const pm = gm.filter(m => m.player.toLowerCase() === player.toLowerCase());
-    if (!pm.length) return null;
     const weekMap = {};
     pm.forEach(m => { weekMap[m.week] = m.team_earned; });
-    // Build cumulative totals — carry forward last known value for missing weeks
-    let cumTotal = 0, started = false;
+
+    let cumTotal = 0;
     const data = allWeeks.map(w => {
-      if (weekMap[w] !== undefined) { cumTotal += weekMap[w]; started = true; }
-      return started ? cumTotal : null;
+      if (weekMap[w] !== undefined) cumTotal += weekMap[w];
+      return cumTotal; // 0 before first match, growing after
     });
+
     return {
       label: player,
       data,
@@ -880,12 +880,13 @@ function buildChartData(gameType) {
       backgroundColor: PLAYER_COLORS[i].bg,
       fill: true,
       tension: 0.35,
-      spanGaps: true,
+      spanGaps: false,
       pointRadius: 5,
       pointHoverRadius: 7,
       borderWidth: 2,
     };
-  }).filter(Boolean);
+  }); // All players included — those who haven't played show as a flat 0 line
+
   return { labels: allWeeks.map(w => `Week ${w}`), datasets };
 }
 
