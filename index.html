@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Big Pitcher of Water — APA Stats v16</title>
+<link rel="icon" type="image/png" href="favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -302,7 +303,7 @@ let patchDates = {};
 let activeTab  = '8ball';
 let advTabs    = { adv8ball: true, adv9ball: false };
 let expandedAdv = new Set(); // keys: `${gt}_${player}`
-const sorts    = { '8ball': {col:null,dir:-1}, '9ball': {col:null,dir:-1} };
+const sorts    = { '8ball': {col:null,dir:-1}, '9ball': {col:null,dir:-1}, 'mp': {col:null,dir:-1} };
 
 function isYes(v) { return (v||'').toLowerCase().trim() === 'yes'; }
 
@@ -859,6 +860,60 @@ function renderPatches() {
 }
 
 // ══════════════════════════════════════════
+// RENDER — MATCHES PLAYED TABLE
+// ══════════════════════════════════════════
+function sortClickMp(col) {
+  const s = sorts['mp'];
+  s.dir = (s.col === col) ? s.dir * -1 : -1;
+  s.col = col;
+  renderTeam();
+}
+function mpThCls(col) {
+  const s = sorts['mp'];
+  if (s.col !== col) return '';
+  return s.dir === -1 ? 'sort-desc' : 'sort-asc';
+}
+function renderMatchesPlayed() {
+  const s = sorts['mp'];
+  const data = PLAYERS.map(p => ({
+    name: p,
+    eightBall: getMatches(p, '8ball').length,
+    nineBall:  getMatches(p, '9ball').length,
+    total:     getMatches(p, '8ball').length + getMatches(p, '9ball').length
+  }));
+  const sorted = [...data].sort((a, b) => {
+    if (s.col === 'nm')  return s.dir * (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    if (s.col === '8b')  return s.dir * (b.eightBall - a.eightBall);
+    if (s.col === '9b')  return s.dir * (b.nineBall  - a.nineBall);
+    if (s.col === 'tot') return s.dir * (b.total      - a.total);
+    return 0;
+  });
+  let html = `<div class="card">
+    <div class="card-head">
+      <span class="card-title">Matches Played</span>
+      <span class="card-sub">Individual match counts by game type</span>
+    </div>
+    <div class="tbl-wrap"><table class="stbl">
+      <thead><tr>
+        <th onclick="sortClickMp('nm')"  class="${mpThCls('nm')}">Player</th>
+        <th onclick="sortClickMp('8b')"  class="${mpThCls('8b')}"  style="text-align:center">8-Ball</th>
+        <th onclick="sortClickMp('9b')"  class="${mpThCls('9b')}"  style="text-align:center">9-Ball</th>
+        <th onclick="sortClickMp('tot')" class="${mpThCls('tot')}" style="text-align:center">Total</th>
+      </tr></thead>
+      <tbody>`;
+  sorted.forEach(row => {
+    html += `<tr>
+      <td class="pname" style="font-size:1.05rem">${row.name}</td>
+      <td style="text-align:center" class="stat-val">${row.eightBall || '—'}</td>
+      <td style="text-align:center" class="stat-val">${row.nineBall  || '—'}</td>
+      <td style="text-align:center;font-family:'Oswald',sans-serif;font-size:1rem;font-weight:700;color:var(--navy)">${row.total || '—'}</td>
+    </tr>`;
+  });
+  html += `</tbody></table></div></div>`;
+  return html;
+}
+
+// ══════════════════════════════════════════
 // RENDER — TEAM (area charts via Chart.js)
 // ══════════════════════════════════════════
 function buildChartData(gameType) {
@@ -929,7 +984,8 @@ function renderTeam() {
         ? `<div style="position:relative;height:320px"><canvas id="chart9"></canvas></div>`
         : `<div class="no-data">No 9-ball match data yet</div>`}
     </div>
-  </div>`;
+  </div>
+  ${renderMatchesPlayed()}`;
 
   const chartDefaults = {
     responsive: true,
