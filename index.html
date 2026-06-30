@@ -470,7 +470,7 @@ function getMatches(player, gt) {
 }
 function calcStats(ms) {
   if (!ms.length) return null;
-  const wins       = ms.filter(m => m.player_earned > m.opponent_earned).length;
+  const wins       = ms.filter(m => m.team_earned > m.oppteam_earned).length;
   const totTeam    = ms.reduce((s,m) => s + m.team_earned, 0);   // PPM uses team_earned
   const totEarned  = ms.reduce((s,m) => s + m.player_earned, 0); // racks won / balls potted
   const ppm        = totTeam / ms.length;
@@ -624,7 +624,7 @@ function renderGame(gt) {
   </div>`;
 
   if (gm.length) {
-    const wins    = gm.filter(m => m.player_earned > m.opponent_earned).length;
+    const wins    = gm.filter(m => m.team_earned > m.oppteam_earned).length;
     const weeks   = new Set(gm.map(m => m.week));
     const teamPPM = weeks.size > 0
       ? (gm.reduce((s,m) => s + m.team_earned, 0) / weeks.size).toFixed(1) : '—';
