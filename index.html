@@ -449,14 +449,14 @@ async function fetchData() {
 }
 
 const PLAYER_COLORS = [
-  { border:'#e63946', bg:'rgba(230,57,70,0.12)'   },
-  { border:'#457b9d', bg:'rgba(69,123,157,0.12)'  },
-  { border:'#2a9d8f', bg:'rgba(42,157,143,0.12)'  },
-  { border:'#e9c46a', bg:'rgba(233,196,106,0.12)' },
-  { border:'#f4a261', bg:'rgba(244,162,97,0.12)'  },
-  { border:'#a8dadc', bg:'rgba(168,218,220,0.18)' },
-  { border:'#9b5de5', bg:'rgba(155,93,229,0.12)'  },
-  { border:'#81b29a', bg:'rgba(129,178,154,0.12)' },
+  { border:'#e63946', bg:'rgba(230,57,70,0.72)'   },
+  { border:'#457b9d', bg:'rgba(69,123,157,0.72)'  },
+  { border:'#2a9d8f', bg:'rgba(42,157,143,0.72)'  },
+  { border:'#e9c46a', bg:'rgba(233,196,106,0.72)' },
+  { border:'#f4a261', bg:'rgba(244,162,97,0.72)'  },
+  { border:'#a8dadc', bg:'rgba(168,218,220,0.72)' },
+  { border:'#9b5de5', bg:'rgba(155,93,229,0.72)'  },
+  { border:'#81b29a', bg:'rgba(129,178,154,0.72)' },
 ];
 
 // ══════════════════════════════════════════
@@ -955,6 +955,13 @@ function buildChartData(gameType) {
     return aFinal - bFinal;
   });
 
+  // Assign fill targets after sorting:
+  // bottom dataset fills to the x-axis (origin); every other fills to
+  // the dataset immediately below it so bands never overlap.
+  datasets.forEach((ds, idx) => {
+    ds.fill = idx === 0 ? 'origin' : '-1';
+  });
+
   return { labels: allWeeks.map(w => `Week ${w}`), datasets };
 }
 
@@ -1016,8 +1023,10 @@ function renderTeam() {
         titleFont: { family: "'Oswald', sans-serif", size: 13 },
         bodyFont: { family: "'Open Sans', sans-serif", size: 12 },
         padding: 12,
+        itemSort: (a, b) => b.raw - a.raw,
+        filter: item => item.raw > 0,
         callbacks: {
-          label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y ?? '—'} pts`
+          label: ctx => ` ${ctx.dataset.label}: ${ctx.raw} pts`
         }
       }
     },
