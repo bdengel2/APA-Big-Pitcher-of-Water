@@ -947,6 +947,14 @@ function buildChartData(gameType) {
     };
   }); // All players included — those who haven't played show as a flat 0 line
 
+  // Sort ascending by final cumulative total so Chart.js renders the
+  // highest-scoring player on top and lowest on the bottom.
+  datasets.sort((a, b) => {
+    const aFinal = a.data[a.data.length - 1] || 0;
+    const bFinal = b.data[b.data.length - 1] || 0;
+    return aFinal - bFinal;
+  });
+
   return { labels: allWeeks.map(w => `Week ${w}`), datasets };
 }
 
