@@ -1016,6 +1016,7 @@ function renderTeam() {
           pointStyle: 'circle',
           boxWidth: 10,
           boxHeight: 10,
+          sort: (a, b) => b.datasetIndex - a.datasetIndex,
         }
       },
       tooltip: {
